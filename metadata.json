@@ -1,0 +1,7 @@
+{
+  "name": "Kalkan Klavye",
+  "description": "Ultra hafif, saf native hızında, sınırsız panolu ve anında yedeklemeli profesyonel Türkçe klavye.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

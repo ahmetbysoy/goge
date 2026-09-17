@@ -1,0 +1,39 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Shield Outline / Base -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M54,26 C64,26 76,22 76,22 C76,46 70,68 54,82 C38,68 32,46 32,22 C32,22 44,26 54,26 Z" />
+    <path
+        android:fillColor="#0B132B"
+        android:pathData="M54,29 C62,29 72,25.5 72,25.5 C72,45 67,64 54,77 C41,64 36,45 36,25.5 C36,25.5 46,29 54,29 Z" />
+
+    <!-- Keyboard & Clipboard Emblem -->
+    <!-- Clipboard Top Clip -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M50,33 h8 v4 h-8 z" />
+    
+    <!-- Keyboard Key Grid -->
+    <!-- Row 1 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M42,41 h5 v4 h-5 z M49,41 h5 v4 h-5 z M56,41 h5 v4 h-5 z M63,41 h5 v4 h-5 z" />
+    <!-- Row 2 -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M44,48 h5 v4 h-5 z M51,48 h5 v4 h-5 z M58,48 h5 v4 h-5 z M65,48 h4 v4 h-4 z" />
+    <!-- Row 3 - Spacebar -->
+    <path
+        android:fillColor="#38EF7D"
+        android:pathData="M46,55 h18 v4 h-18 z" />
+    
+    <!-- Infinite loop symbol for infinite clipboard -->
+    <path
+        android:strokeColor="#00E5FF"
+        android:strokeWidth="1.8"
+        android:pathData="M46,65 C43,65 42,67.5 44,69 C46,70.5 51,66 54,67.5 C57,69 62,64.5 64,66 C66,67.5 65,70 62,70 C59,70 57,67.5 54,67.5 C51,67.5 49,65 46,65 Z" />
+</vector>
