@@ -44,6 +44,7 @@ class KalkanIME : InputMethodService() {
 
     private lateinit var rootContainer: LinearLayout
     private lateinit var headerBar: LinearLayout
+    private lateinit var editToolbar: LinearLayout
     private lateinit var quickChipsScroll: HorizontalScrollView
     private lateinit var quickChipsContainer: LinearLayout
     private lateinit var keyboardViewContainer: FrameLayout
@@ -141,63 +142,128 @@ class KalkanIME : InputMethodService() {
     private fun buildHeaderBar() {
         val theme = getThemeColors()
 
+        // Outer header: two rows — edit tools + mode/chips
         headerBar = LinearLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(42)
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(2), dp(2), dp(2), dp(4))
+        }
+
+        // ------------------------------------------------------------------
+        // ROW 1: Select All / Cut / Copy / Paste
+        // ------------------------------------------------------------------
+        editToolbar = LinearLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(40)
             )
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(4), dp(2), dp(4), dp(2))
+            setPadding(dp(2), dp(2), dp(2), dp(2))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(10).toFloat()
+                setColor(Color.parseColor("#121826"))
+                setStroke(dp(1), theme.chipBorder)
+            }
         }
 
-        // Action Buttons Row (Clipboard toggle, Emoji toggle, Settings, Hide keyboard)
+        // Equal-weight edit action buttons across the full width
+        editToolbar.addView(
+            createEditToolButton(
+                icon = "☑",
+                label = "Seç",
+                contentDescription = "Tümünü seç"
+            ) { performSelectAll() }
+        )
+        editToolbar.addView(
+            createEditToolButton(
+                icon = "✂",
+                label = "Kes",
+                contentDescription = "Kes"
+            ) { performCut() }
+        )
+        editToolbar.addView(
+            createEditToolButton(
+                icon = "⧉",
+                label = "Kopya",
+                contentDescription = "Kopyala"
+            ) { performCopy() }
+        )
+        editToolbar.addView(
+            createEditToolButton(
+                icon = "📋",
+                label = "Yapıştır",
+                contentDescription = "Yapıştır"
+            ) { performPaste() }
+        )
+
+        headerBar.addView(editToolbar)
+
+        // ------------------------------------------------------------------
+        // ROW 2: Mode buttons + quick clipboard chips + hide
+        // ------------------------------------------------------------------
+        val modeRow = LinearLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(42)
+            ).apply {
+                topMargin = dp(4)
+            }
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(2), 0, dp(2), 0)
+        }
+
         val actionButtons = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
 
-        // Pano Sheet Toggle Button
-        val btnClipboard = createHeaderIconButton("📋") {
-            if (currentMode == KeyboardMode.CLIPBOARD) {
-                showMode(KeyboardMode.LETTERS)
-            } else {
-                showMode(KeyboardMode.CLIPBOARD)
+        // Pano sheet toggle
+        actionButtons.addView(
+            createHeaderIconButton("🗂") {
+                if (currentMode == KeyboardMode.CLIPBOARD) {
+                    showMode(KeyboardMode.LETTERS)
+                } else {
+                    showMode(KeyboardMode.CLIPBOARD)
+                }
             }
-        }
-        actionButtons.addView(btnClipboard)
+        )
 
-        // Emoji Toggle Button
-        val btnEmoji = createHeaderIconButton("😀") {
-            if (currentMode == KeyboardMode.EMOJI) {
-                showMode(KeyboardMode.LETTERS)
-            } else {
-                showMode(KeyboardMode.EMOJI)
+        // Emoji toggle
+        actionButtons.addView(
+            createHeaderIconButton("😀") {
+                if (currentMode == KeyboardMode.EMOJI) {
+                    showMode(KeyboardMode.LETTERS)
+                } else {
+                    showMode(KeyboardMode.EMOJI)
+                }
             }
-        }
-        actionButtons.addView(btnEmoji)
+        )
 
-        // App/Settings Open Button
-        val btnSettings = createHeaderIconButton("🛡️") {
-            val intent = Intent(this@KalkanIME, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        // App / settings
+        actionButtons.addView(
+            createHeaderIconButton("🛡") {
+                val intent = Intent(this@KalkanIME, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                }
+                startActivity(intent)
             }
-            startActivity(intent)
-        }
-        actionButtons.addView(btnSettings)
+        )
 
-        // Select All / Copy / Paste quick tool
-        val btnPaste = createHeaderIconButton("📥") {
-            val latest = clipboardEngine.itemsFlow.value.firstOrNull()
-            if (latest != null) {
-                commitText(latest.text)
+        // Hide keyboard
+        actionButtons.addView(
+            createHeaderIconButton("▼") {
+                requestHideSelf(0)
             }
-        }
-        actionButtons.addView(btnPaste)
+        )
 
-        headerBar.addView(actionButtons)
+        modeRow.addView(actionButtons)
 
-        // Quick Chips Horizontal Scroll
+        // Quick chips
         quickChipsScroll = HorizontalScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 0,
@@ -214,9 +280,184 @@ class KalkanIME : InputMethodService() {
             gravity = Gravity.CENTER_VERTICAL
         }
         quickChipsScroll.addView(quickChipsContainer)
-        headerBar.addView(quickChipsScroll)
+        modeRow.addView(quickChipsScroll)
+
+        headerBar.addView(modeRow)
 
         refreshQuickChips()
+    }
+
+    /**
+     * Compact labeled tool button used in the Select/Cut/Copy/Paste toolbar.
+     * weight=1 so four actions share the full keyboard width evenly.
+     */
+    private fun createEditToolButton(
+        icon: String,
+        label: String,
+        desc: String,
+        onClick: () -> Unit
+    ): LinearLayout {
+        val theme = getThemeColors()
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply {
+                marginStart = dp(2)
+                marginEnd = dp(2)
+            }
+            background = GradientDrawable().apply {
+                cornerRadius = dp(8).toFloat()
+                setColor(theme.keySpecial)
+            }
+            isClickable = true
+            isFocusable = true
+            contentDescription = desc
+            setOnClickListener {
+                performFeedback()
+                onClick()
+            }
+            // Pressed-state flash
+            setOnTouchListener { v, event ->
+                when (event.action) {
+                    android.view.MotionEvent.ACTION_DOWN -> {
+                        v.alpha = 0.65f
+                    }
+                    android.view.MotionEvent.ACTION_UP,
+                    android.view.MotionEvent.ACTION_CANCEL -> {
+                        v.alpha = 1f
+                    }
+                }
+                false
+            }
+
+            val iconView = TextView(this@KalkanIME).apply {
+                text = icon
+                textSize = 14f
+                setTextColor(theme.keySpecialText)
+                gravity = Gravity.CENTER
+                includeFontPadding = false
+            }
+            addView(iconView)
+
+            val labelView = TextView(this@KalkanIME).apply {
+                text = label
+                setTextColor(theme.keyText)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+                includeFontPadding = false
+                setPadding(dp(4), 0, 0, 0)
+            }
+            addView(labelView)
+        }
+    }
+
+    // =========================================================================
+    // EDIT ACTIONS: Select All / Cut / Copy / Paste
+    // =========================================================================
+
+    private fun performSelectAll() {
+        val ic = currentInputConnection ?: return
+        // Prefer framework context-menu action (works with most editors).
+        val handled = ic.performContextMenuAction(android.R.id.selectAll)
+        if (!handled) {
+            // Fallback: expand selection across before+after cursor text.
+            val before = ic.getTextBeforeCursor(MAX_EDIT_CHARS, 0)?.length ?: 0
+            val after = ic.getTextAfterCursor(MAX_EDIT_CHARS, 0)?.length ?: 0
+            ic.setSelection(0, before + after)
+        }
+    }
+
+    private fun performCopy() {
+        val ic = currentInputConnection ?: return
+        val selected = ic.getSelectedText(0)?.toString()
+        if (!selected.isNullOrEmpty()) {
+            // Save into master clipboard first, then system clipboard via context action.
+            clipboardEngine.addClip(selected, sourceApp = "KalkanIME-Copy")
+            val handled = ic.performContextMenuAction(android.R.id.copy)
+            if (!handled) {
+                clipboardManager?.setPrimaryClip(ClipData.newPlainText("Kalkan", selected))
+            }
+            refreshQuickChips()
+            return
+        }
+        // Nothing selected → select all then copy (common keyboard UX)
+        performSelectAll()
+        val allSelected = ic.getSelectedText(0)?.toString()
+        if (!allSelected.isNullOrEmpty()) {
+            clipboardEngine.addClip(allSelected, sourceApp = "KalkanIME-CopyAll")
+            if (!ic.performContextMenuAction(android.R.id.copy)) {
+                clipboardManager?.setPrimaryClip(ClipData.newPlainText("Kalkan", allSelected))
+            }
+            refreshQuickChips()
+        }
+    }
+
+    private fun performCut() {
+        val ic = currentInputConnection ?: return
+        val selected = ic.getSelectedText(0)?.toString()
+        if (!selected.isNullOrEmpty()) {
+            clipboardEngine.addClip(selected, sourceApp = "KalkanIME-Cut")
+            val handled = ic.performContextMenuAction(android.R.id.cut)
+            if (!handled) {
+                clipboardManager?.setPrimaryClip(ClipData.newPlainText("Kalkan", selected))
+                ic.commitText("", 1) // delete selection
+            }
+            refreshQuickChips()
+            return
+        }
+        // Nothing selected → select all then cut
+        performSelectAll()
+        val allSelected = ic.getSelectedText(0)?.toString()
+        if (!allSelected.isNullOrEmpty()) {
+            clipboardEngine.addClip(allSelected, sourceApp = "KalkanIME-CutAll")
+            if (!ic.performContextMenuAction(android.R.id.cut)) {
+                clipboardManager?.setPrimaryClip(ClipData.newPlainText("Kalkan", allSelected))
+                ic.commitText("", 1)
+            }
+            refreshQuickChips()
+        }
+    }
+
+    private fun performPaste() {
+        val ic = currentInputConnection ?: return
+
+        // 1) Try system paste (respects the real clipboard)
+        val handled = ic.performContextMenuAction(android.R.id.paste)
+        if (handled) {
+            // Also capture whatever is on the system clipboard into master pano
+            captureClipboardContent("KalkanIME-Paste")
+            refreshQuickChips()
+            return
+        }
+
+        // 2) Fallback: system clipboard text
+        try {
+            val clip = clipboardManager?.primaryClip
+            val sysText = clip?.takeIf { it.itemCount > 0 }
+                ?.getItemAt(0)
+                ?.coerceToText(this)
+                ?.toString()
+            if (!sysText.isNullOrBlank()) {
+                commitText(sysText)
+                clipboardEngine.addClip(sysText, sourceApp = "KalkanIME-Paste")
+                refreshQuickChips()
+                return
+            }
+        } catch (_: Exception) {
+            // ignore
+        }
+
+        // 3) Last resort: latest item from Master Clipboard engine
+        val latest = clipboardEngine.itemsFlow.value.firstOrNull()
+        if (latest != null) {
+            commitText(latest.text)
+        }
+    }
+
+    companion object {
+        /** Guard for getTextBefore/AfterCursor fallbacks (Select All). */
+        private const val MAX_EDIT_CHARS = 100_000
     }
 
     private fun refreshQuickChips() {
