@@ -53,7 +53,25 @@ class MasterClipboardEngine private constructor(private val context: Context) {
     private val streamTxtFile: File by lazy { File(storageDir, "clipboard_stream.txt") }
     private val exportMdFile: File by lazy { File(storageDir, "clipboard_export.md") }
 
+    private val newClipListeners = mutableListOf<(ClipboardItem) -> Unit>()
+
+    /** Register a listener for newly added clips (auto-sync, widgets, etc.). */
+    fun addOnNewClipListener(listener: (ClipboardItem) -> Unit) {
+        synchronized(newClipListeners) {
+            if (!newClipListeners.contains(listener)) newClipListeners.add(listener)
+        }
+    }
+
+    fun removeOnNewClipListener(listener: (ClipboardItem) -> Unit) {
+        synchronized(newClipListeners) { newClipListeners.remove(listener) }
+    }
+
+    @Deprecated("Use addOnNewClipListener", ReplaceWith("addOnNewClipListener(value)"))
     var onNewClipAddedListener: ((ClipboardItem) -> Unit)? = null
+        set(value) {
+            field = value
+            if (value != null) addOnNewClipListener(value)
+        }
 
     init {
         loadFromDisk()
@@ -162,10 +180,49 @@ class MasterClipboardEngine private constructor(private val context: Context) {
         }
 
         newlyAdded?.let { item ->
-            onNewClipAddedListener?.invoke(item)
+            val listeners = synchronized(newClipListeners) { newClipListeners.toList() }
+            listeners.forEach { runCatching { it(item) } }
+            onNewClipAddedListener?.let { /* already in list if set via setter */ }
         }
 
         return true
+    }
+
+    /**
+     * Import clips from a Drive (or other) backup.
+     * @param merge if true, keep local items and add missing ones; if false, replace all.
+     * @return number of items written into the new master list
+     */
+    fun importItems(items: List<ClipboardItem>, merge: Boolean = true): Int {
+        if (items.isEmpty()) return 0
+        var resultSize = 0
+        rwLock.write {
+            val combined = if (merge) {
+                val map = LinkedHashMap<String, ClipboardItem>()
+                // Prefer remote text-identity: key by text to avoid dups, keep newer timestamp
+                _itemsFlow.value.forEach { map[it.text] = it }
+                items.forEach { incoming ->
+                    val existing = map[incoming.text]
+                    if (existing == null || incoming.timestamp >= existing.timestamp) {
+                        map[incoming.text] = incoming
+                    }
+                }
+                map.values.toList()
+            } else {
+                items
+            }
+            val sorted = combined.sortedWith(
+                compareByDescending<ClipboardItem> { it.isPinned }
+                    .thenByDescending { it.timestamp }
+            )
+            _itemsFlow.value = sorted
+            updateStats(sorted)
+            resultSize = sorted.size
+            scope.launch {
+                saveToDiskInternal(sorted, appendToStream = null)
+            }
+        }
+        return resultSize
     }
 
     fun togglePin(id: String) {

@@ -11,8 +11,8 @@ android {
     applicationId = "com.aistudio.kalkankeyboard.core"
     minSdk = 24
     targetSdk = 36
-    versionCode = 3
-    versionName = "1.2"
+    versionCode = 4
+    versionName = "1.3"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -129,8 +129,9 @@ dependencies {
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
 
-  // Cloud sync uses OkHttp only (no Retrofit / Moshi / Firebase).
+  // Cloud sync: OkHttp REST + Google Sign-In (Drive backup, no full Drive SDK).
   implementation(libs.okhttp)
+  implementation(libs.play.services.auth)
 
   // Tests (not packaged into APK)
   testImplementation(libs.junit)

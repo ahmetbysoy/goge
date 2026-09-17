@@ -3,3 +3,12 @@
     <string name="ime_name">Kalkan Klavye</string>
     <string name="ime_settings">Kalkan Klavye Ayarları</string>
 </resources>
+
+    <!--
+      Google Cloud Console → APIs & Services → Credentials
+      Create OAuth client ID (Android) with package:
+        com.aistudio.kalkankeyboard.core
+      and THIS debug keystore SHA-1.
+      Web client id is optional for requestIdToken; Drive file scope works with requestEmail+scopes.
+    -->
+    <string name="default_web_client_id" translatable="false"></string>

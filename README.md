@@ -25,3 +25,10 @@ chmod +x ./gradlew
 ./gradlew assembleRelease
 # APK: app/build/outputs/apk/release/
 ```
+
+
+## Google Drive yedekleme
+
+Kullanıcı: **Ayarlar → Google ile Giriş Yap → Yedekle / Geri Yükle**.
+
+Geliştirici kurulumu (OAuth SHA-1, Drive API): [docs/GOOGLE_DRIVE_SETUP.md](docs/GOOGLE_DRIVE_SETUP.md)

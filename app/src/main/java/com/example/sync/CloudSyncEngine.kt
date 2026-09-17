@@ -45,8 +45,8 @@ class CloudSyncEngine(private val context: Context) {
     private val settingsRepo = SettingsRepository.getInstance(context)
 
     init {
-        // Register instant push trigger whenever a new clip is added
-        clipboardEngine.onNewClipAddedListener = { item ->
+        // Webhook path — Drive auto-sync is handled by GoogleDriveBackup.
+        clipboardEngine.addOnNewClipListener { item ->
             val settings = settingsRepo.settingsFlow.value
             if (settings.autoSyncOnCopy && settings.cloudSyncUrl.isNotBlank()) {
                 pushSingleClip(item, settings.cloudSyncUrl, settings.cloudSyncSecret)

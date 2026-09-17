@@ -23,3 +23,8 @@
 
 # Compose (safe defaults)
 -keep class androidx.compose.runtime.** { *; }
+
+# Google Sign-In / Auth
+-keep class com.google.android.gms.auth.** { *; }
+-keep class com.google.android.gms.common.** { *; }
+-dontwarn com.google.android.gms.**

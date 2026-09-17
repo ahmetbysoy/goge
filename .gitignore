@@ -20,7 +20,9 @@ local.properties
 *.keystore
 upload-keystore.jks
 my-upload-key.jks
-debug.keystore
+
+# Shared debug keystore (stable SHA-1 for Google OAuth in CI + sideload)
+!debug.keystore
 
 # Logs
 *.log

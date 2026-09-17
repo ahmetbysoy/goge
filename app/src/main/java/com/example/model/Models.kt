@@ -46,7 +46,10 @@ data class KeyboardSettings(
     val cloudSyncUrl: String = "",
     val cloudSyncSecret: String = "",
     val autoSyncOnCopy: Boolean = false,
-    val themeName: String = "Koyu Siber (OLED)"
+    val themeName: String = "Koyu Siber (OLED)",
+    /** Last successful Google Drive backup time label. */
+    val lastDriveBackupAt: String = "",
+    val lastDriveFileId: String = ""
 )
 
 /**

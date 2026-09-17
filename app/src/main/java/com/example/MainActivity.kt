@@ -12,8 +12,10 @@ import android.provider.Settings
 import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
@@ -104,6 +106,8 @@ import com.example.model.ClipboardItem
 import com.example.model.ClipboardStats
 import com.example.model.KeyboardSettings
 import com.example.sync.CloudSyncEngine
+import com.example.sync.GoogleAccountManager
+import com.example.sync.GoogleDriveBackup
 import com.example.sync.SyncState
 import com.example.ui.theme.AmberAccent
 import com.example.ui.theme.CrimsonAccent
@@ -126,6 +130,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var clipboardEngine: MasterClipboardEngine
     private lateinit var settingsRepo: SettingsRepository
     private lateinit var syncEngine: CloudSyncEngine
+    private lateinit var googleAccounts: GoogleAccountManager
+    private lateinit var driveBackup: GoogleDriveBackup
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -134,6 +140,11 @@ class MainActivity : ComponentActivity() {
         clipboardEngine = MasterClipboardEngine.getInstance(this)
         settingsRepo = SettingsRepository.getInstance(this)
         syncEngine = CloudSyncEngine.getInstance(this)
+        googleAccounts = GoogleAccountManager.getInstance(this)
+        driveBackup = GoogleDriveBackup.getInstance(this)
+
+        // Restore session email if Play Services already has a silent account
+        googleAccounts.lastSignedInAccount()?.let { googleAccounts.persist(it) }
 
         setContent {
             MyApplicationTheme {
@@ -141,6 +152,8 @@ class MainActivity : ComponentActivity() {
                     clipboardEngine = clipboardEngine,
                     settingsRepo = settingsRepo,
                     syncEngine = syncEngine,
+                    googleAccounts = googleAccounts,
+                    driveBackup = driveBackup,
                     onOpenImeSettings = { openImeSettings() },
                     onShowImePicker = { showImePicker() }
                 )
@@ -174,6 +187,8 @@ fun MainAppScreen(
     clipboardEngine: MasterClipboardEngine,
     settingsRepo: SettingsRepository,
     syncEngine: CloudSyncEngine,
+    googleAccounts: GoogleAccountManager,
+    driveBackup: GoogleDriveBackup,
     onOpenImeSettings: () -> Unit,
     onShowImePicker: () -> Unit
 ) {
@@ -181,7 +196,13 @@ fun MainAppScreen(
     val clips by clipboardEngine.itemsFlow.collectAsState()
     val stats by clipboardEngine.statsFlow.collectAsState()
     val settings by settingsRepo.settingsFlow.collectAsState()
-    val syncState by syncEngine.syncState.collectAsState()
+    val webhookState by syncEngine.syncState.collectAsState()
+    val driveState by driveBackup.state.collectAsState()
+    // Prefer Drive status when active, else webhook
+    val syncState = when {
+        driveState !is SyncState.Idle -> driveState
+        else -> webhookState
+    }
 
     val context = LocalContext.current
 
@@ -311,7 +332,9 @@ fun MainAppScreen(
                     settings = settings,
                     onUpdateSettings = { settingsRepo.updateSettings(it) },
                     syncEngine = syncEngine,
-                    clipboardEngine = clipboardEngine
+                    clipboardEngine = clipboardEngine,
+                    googleAccounts = googleAccounts,
+                    driveBackup = driveBackup
                 )
             }
         }
@@ -914,16 +937,38 @@ fun SettingsTab(
     settings: KeyboardSettings,
     onUpdateSettings: (KeyboardSettings) -> Unit,
     syncEngine: CloudSyncEngine,
-    clipboardEngine: MasterClipboardEngine
+    clipboardEngine: MasterClipboardEngine,
+    googleAccounts: GoogleAccountManager,
+    driveBackup: GoogleDriveBackup
 ) {
     val context = LocalContext.current
     val vibrator = remember { context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator }
     val scope = rememberCoroutineScope()
+    val accountEmail by googleAccounts.accountEmail.collectAsState()
+    val driveState by driveBackup.state.collectAsState()
 
     var tempSyncUrl by remember(settings.cloudSyncUrl) { mutableStateOf(settings.cloudSyncUrl) }
     var tempSyncSecret by remember(settings.cloudSyncSecret) { mutableStateOf(settings.cloudSyncSecret) }
     var pingResult by remember { mutableStateOf<String?>(null) }
     var isPinging by remember { mutableStateOf(false) }
+    var signInError by remember { mutableStateOf<String?>(null) }
+
+    val signInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val outcome = googleAccounts.handleSignInResult(result.data)
+        outcome.onSuccess { account ->
+            signInError = null
+            Toast.makeText(
+                context,
+                "Google bağlandı: ${account.email ?: account.displayName}",
+                Toast.LENGTH_SHORT
+            ).show()
+        }.onFailure { e ->
+            signInError = e.localizedMessage ?: "Google girişi iptal / başarısız"
+            Toast.makeText(context, signInError, Toast.LENGTH_LONG).show()
+        }
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -931,6 +976,189 @@ fun SettingsTab(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // -----------------------------------------------------------------
+        // GOOGLE HESABI + DRIVE YEDEK (ana yol)
+        // -----------------------------------------------------------------
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = CyberDarkSurface),
+                shape = RoundedCornerShape(16.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, CyanAccent.copy(alpha = 0.5f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("☁️", fontSize = 20.sp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                "Google Drive Yedekleme",
+                                color = TextPrimary,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "Kendi Google hesabınla giriş → panon Drive'a",
+                                color = TextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    if (accountEmail.isNullOrBlank()) {
+                        Text(
+                            "Sheets yerine Drive dosyası kullanıyoruz: sınırsız karakter, tek JSON, geri yükleme kolay.",
+                            color = TextTertiary,
+                            fontSize = 11.sp
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = {
+                                signInError = null
+                                signInLauncher.launch(googleAccounts.signInIntent())
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = CyanAccent),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text(
+                                "Google ile Giriş Yap",
+                                color = CyberBlack,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(EmeraldAccent.copy(alpha = 0.12f))
+                                .border(1.dp, EmeraldAccent.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = EmeraldAccent,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Bağlı hesap", color = TextSecondary, fontSize = 11.sp)
+                                Text(
+                                    accountEmail ?: "",
+                                    color = TextPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                                if (settings.lastDriveBackupAt.isNotBlank()) {
+                                    Text(
+                                        "Son yedek: ${settings.lastDriveBackupAt}",
+                                        color = EmeraldAccent,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        SettingToggleRow(
+                            title = "Otomatik Drive Yedek",
+                            subtitle = "Her kopyada panoyu Drive'a güncelle",
+                            checked = settings.autoSyncOnCopy,
+                            onCheckedChange = { onUpdateSettings(settings.copy(autoSyncOnCopy = it)) }
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = { driveBackup.backupNow(keepHistory = true) },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = CyanAccent),
+                                shape = RoundedCornerShape(10.dp),
+                                enabled = driveState !is SyncState.Syncing
+                            ) {
+                                if (driveState is SyncState.Syncing) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp,
+                                        color = CyberBlack
+                                    )
+                                } else {
+                                    Icon(
+                                        Icons.Default.Send,
+                                        contentDescription = null,
+                                        tint = CyberBlack,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Yedekle", color = CyberBlack, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                            }
+                            Button(
+                                onClick = { driveBackup.restoreNow(merge = true) },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = CyberCardSurface),
+                                shape = RoundedCornerShape(10.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, CyanAccent.copy(alpha = 0.5f)),
+                                enabled = driveState !is SyncState.Syncing
+                            ) {
+                                Text("Geri Yükle", color = CyanAccent, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        TextButton(
+                            onClick = {
+                                googleAccounts.signOut {
+                                    Toast.makeText(context, "Google oturumu kapatıldı", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Hesaptan Çık", color = CrimsonAccent, fontSize = 12.sp)
+                        }
+
+                        Text(
+                            "Drive yolu: My Drive / KalkanKlavye / clipboard_master.json",
+                            color = TextTertiary,
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+
+                    signInError?.let {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(it, color = CrimsonAccent, fontSize = 11.sp)
+                    }
+
+                    when (val st = driveState) {
+                        is SyncState.Success -> {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(st.message, color = EmeraldAccent, fontSize = 11.sp)
+                        }
+                        is SyncState.Error -> {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(st.error, color = CrimsonAccent, fontSize = 11.sp)
+                        }
+                        is SyncState.Syncing -> {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Drive işlemi sürüyor…", color = CyanAccent, fontSize = 11.sp)
+                        }
+                        else -> {}
+                    }
+                }
+            }
+        }
+
         // Haptic & Vibration Settings
         item {
             Card(
@@ -1028,7 +1256,7 @@ fun SettingsTab(
             }
         }
 
-        // Cloud Backup & Instant Push Settings
+        // Optional advanced webhook (power users)
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1037,25 +1265,12 @@ fun SettingsTab(
                 border = androidx.compose.foundation.BorderStroke(1.dp, CyberCardBorder)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Share, contentDescription = null, tint = CyanAccent)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("☁️ Anında Bulut & Webhook Yedekleme", color = TextPrimary, fontWeight = FontWeight.Bold)
-                    }
+                    Text("⚙️ Gelişmiş: Webhook (opsiyonel)", color = TextSecondary, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Kopyalanan her öğeyi veya tam veritabanını Gmail/Drive köprü servisine, kişisel sunucuna veya Webhook'a anında push et.",
-                        color = TextSecondary,
+                        text = "Google yerine kendi sunucuna / n8n / Make endpoint'ine POST. Çoğu kullanıcıya gerekmez.",
+                        color = TextTertiary,
                         fontSize = 11.sp
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    SettingToggleRow(
-                        title = "Otomatik Push (Her Kopyalamada)",
-                        subtitle = "Metin kopyalandığı saniyede buluta gönderilir",
-                        checked = settings.autoSyncOnCopy,
-                        onCheckedChange = { onUpdateSettings(settings.copy(autoSyncOnCopy = it)) }
                     )
 
                     Spacer(modifier = Modifier.height(10.dp))
@@ -1067,8 +1282,8 @@ fun SettingsTab(
                             onUpdateSettings(settings.copy(cloudSyncUrl = it))
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Bulut Webhook / REST Endpoint URL") },
-                        placeholder = { Text("https://your-webhook.com/sync", color = TextTertiary) },
+                        label = { Text("Webhook URL") },
+                        placeholder = { Text("https://…", color = TextTertiary) },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = CyanAccent,
                             unfocusedBorderColor = CyberCardBorder,
@@ -1088,8 +1303,7 @@ fun SettingsTab(
                             onUpdateSettings(settings.copy(cloudSyncSecret = it))
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Yetkilendirme Belirteci (Opsiyonel Auth Token)") },
-                        placeholder = { Text("Bearer token veya secret key", color = TextTertiary) },
+                        label = { Text("Auth token (opsiyonel)") },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = CyanAccent,
                             unfocusedBorderColor = CyberCardBorder,
@@ -1109,7 +1323,7 @@ fun SettingsTab(
                         Button(
                             onClick = {
                                 isPinging = true
-                                syncEngine.testPing(tempSyncUrl, tempSyncSecret) { success, msg ->
+                                syncEngine.testPing(tempSyncUrl, tempSyncSecret) { _, msg ->
                                     isPinging = false
                                     pingResult = msg
                                 }
@@ -1122,21 +1336,17 @@ fun SettingsTab(
                             if (isPinging) {
                                 CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = CyanAccent)
                             } else {
-                                Text("🔌 Test Ping", color = CyanAccent, fontSize = 12.sp)
+                                Text("Test", color = CyanAccent, fontSize = 12.sp)
                             }
                         }
 
                         Button(
-                            onClick = {
-                                syncEngine.pushFullBackup(tempSyncUrl, tempSyncSecret)
-                            },
+                            onClick = { syncEngine.pushFullBackup(tempSyncUrl, tempSyncSecret) },
                             modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = CyanAccent),
+                            colors = ButtonDefaults.buttonColors(containerColor = CyberCardSurface),
                             shape = RoundedCornerShape(10.dp)
                         ) {
-                            Icon(Icons.Default.Send, contentDescription = null, tint = CyberBlack, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Tümünü Push Et", color = CyberBlack, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("Push", color = TextPrimary, fontSize = 12.sp)
                         }
                     }
 

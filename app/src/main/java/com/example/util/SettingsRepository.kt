@@ -26,7 +26,9 @@ class SettingsRepository(context: Context) {
             cloudSyncUrl = prefs.getString(KEY_SYNC_URL, "") ?: "",
             cloudSyncSecret = prefs.getString(KEY_SYNC_SECRET, "") ?: "",
             autoSyncOnCopy = prefs.getBoolean(KEY_AUTO_SYNC, false),
-            themeName = prefs.getString(KEY_THEME, "Koyu Siber (OLED)") ?: "Koyu Siber (OLED)"
+            themeName = prefs.getString(KEY_THEME, "Koyu Siber (OLED)") ?: "Koyu Siber (OLED)",
+            lastDriveBackupAt = prefs.getString(KEY_LAST_DRIVE_AT, "") ?: "",
+            lastDriveFileId = prefs.getString(KEY_LAST_DRIVE_FILE, "") ?: ""
         )
     }
 
@@ -42,9 +44,20 @@ class SettingsRepository(context: Context) {
             .putString(KEY_SYNC_SECRET, newSettings.cloudSyncSecret)
             .putBoolean(KEY_AUTO_SYNC, newSettings.autoSyncOnCopy)
             .putString(KEY_THEME, newSettings.themeName)
+            .putString(KEY_LAST_DRIVE_AT, newSettings.lastDriveBackupAt)
+            .putString(KEY_LAST_DRIVE_FILE, newSettings.lastDriveFileId)
             .apply()
 
         _settingsFlow.value = newSettings
+    }
+
+    fun setLastDriveBackup(timeLabel: String, fileId: String) {
+        updateSettings(
+            _settingsFlow.value.copy(
+                lastDriveBackupAt = timeLabel,
+                lastDriveFileId = fileId
+            )
+        )
     }
 
     companion object {
@@ -58,6 +71,8 @@ class SettingsRepository(context: Context) {
         private const val KEY_SYNC_SECRET = "sync_secret"
         private const val KEY_AUTO_SYNC = "auto_sync"
         private const val KEY_THEME = "theme"
+        private const val KEY_LAST_DRIVE_AT = "last_drive_at"
+        private const val KEY_LAST_DRIVE_FILE = "last_drive_file"
 
         @Volatile
         private var instance: SettingsRepository? = null
