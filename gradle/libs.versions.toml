@@ -42,9 +42,6 @@ googleServices = "4.5.0"
 credentials = "1.5.0"
 googleid = "1.1.1"
 playServicesAuth = "21.3.0"
-credentials = "1.5.0"
-# credentials already above if present
-
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
