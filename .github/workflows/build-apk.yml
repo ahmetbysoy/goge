@@ -8,13 +8,13 @@ on:
   workflow_dispatch:
     inputs:
       build_type:
-        description: "APK build type"
+        description: "APK build type (both are R8-minified)"
         required: true
-        default: debug
+        default: release
         type: choice
         options:
-          - debug
           - release
+          - debug
 
 permissions:
   contents: write
@@ -51,8 +51,9 @@ jobs:
         id: meta
         run: |
           TYPE="${{ github.event.inputs.build_type }}"
+          # Default to release on push/PR so the artifact is fully optimized.
           if [ -z "$TYPE" ]; then
-            TYPE="debug"
+            TYPE="release"
           fi
           echo "build_type=$TYPE" >> "$GITHUB_OUTPUT"
           if [ "$TYPE" = "release" ]; then

@@ -2,37 +2,26 @@
 
 Ultra hafif, saf native hızında Türkçe klavye uygulaması.
 
+## Boyut hedefi
+
+APK **~2–4 MB** aralığında tutulur. Bunun için:
+
+- Firebase / Room / Retrofit / Moshi / Material Icons Extended **kullanılmıyor**
+- R8 minify + resource shrink **açık** (debug & release)
+- Yalnızca `armeabi-v7a` + `arm64-v8a` ABI’leri paketlenir
+
 ## GitHub Actions — otomatik APK
 
-`main` / `master` branch'ine her push'ta (veya manuel **Run workflow**) APK üretilir:
+`main` push / PR / manuel **Run workflow** ile APK üretilir.
 
 - Workflow: [`.github/workflows/build-apk.yml`](.github/workflows/build-apk.yml)
-- Çıktı: **Actions → ilgili run → Artifacts** altında `kalkan-klavye-debug`
-- `main` push'larında ayrıca **Releases** sekmesine de yüklenir
-
-### Manuel çalıştırma
-
-1. Repo → **Actions** → **Build APK**
-2. **Run workflow**
-3. `debug` veya `release` seç
-
-### Release imzalama (opsiyonel)
-
-Release APK'yı kendi keystore'unla imzalamak için repo **Settings → Secrets and variables → Actions** altına ekle:
-
-| Secret | Açıklama |
-| --- | --- |
-| `KEYSTORE_BASE64` | `.jks` / `.keystore` dosyasının base64 hali (`base64 -w0 my-upload-key.jks`) |
-| `STORE_PASSWORD` | Keystore şifresi |
-| `KEY_PASSWORD` | Key şifresi |
-| `KEY_ALIAS` | Alias (yoksa `upload`) |
-
-Secret yoksa release de debug keystore ile imzalanır (test için yeterli).
+- **Actions → Artifacts** → `kalkan-klavye-debug` / `kalkan-klavye-release`
+- `main` push’larında **Releases** altına da yüklenir
 
 ### Yerel derleme
 
 ```bash
 chmod +x ./gradlew
-./gradlew assembleDebug
-# APK: app/build/outputs/apk/debug/
+./gradlew assembleRelease
+# APK: app/build/outputs/apk/release/
 ```

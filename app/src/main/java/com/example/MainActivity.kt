@@ -37,25 +37,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Cloud
-import androidx.compose.material.icons.filled.CloudDone
-import androidx.compose.material.icons.filled.CloudUpload
-import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.StarBorder
-import androidx.compose.material.icons.filled.Vibration
-import androidx.compose.material.icons.outlined.ContentPaste
-import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -255,7 +250,7 @@ fun MainAppScreen(
                 NavigationBarItem(
                     selected = selectedTab == MainTab.SETUP,
                     onClick = { selectedTab = MainTab.SETUP },
-                    icon = { Icon(Icons.Default.Keyboard, contentDescription = "Kurulum") },
+                    icon = { Icon(Icons.Default.Build, contentDescription = "Kurulum") },
                     label = { Text("Kurulum") },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = CyberBlack,
@@ -268,7 +263,7 @@ fun MainAppScreen(
                 NavigationBarItem(
                     selected = selectedTab == MainTab.CLIPBOARD,
                     onClick = { selectedTab = MainTab.CLIPBOARD },
-                    icon = { Icon(Icons.Outlined.ContentPaste, contentDescription = "Pano") },
+                    icon = { Icon(Icons.Default.List, contentDescription = "Pano") },
                     label = { Text("Pano (${clips.size})") },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = CyberBlack,
@@ -631,7 +626,7 @@ fun MasterClipboardTab(
                     onClick = { showClearDialog = true }
                 ) {
                     Icon(
-                        Icons.Default.DeleteSweep,
+                        Icons.Default.Delete,
                         contentDescription = "Temizle",
                         tint = CrimsonAccent.copy(alpha = 0.8f)
                     )
@@ -681,7 +676,7 @@ fun MasterClipboardTab(
                             Text((syncState as SyncState.Success).message, color = EmeraldAccent, fontSize = 11.sp)
                         }
                         is SyncState.Error -> {
-                            Icon(Icons.Outlined.Info, contentDescription = null, tint = CrimsonAccent, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Info, contentDescription = null, tint = CrimsonAccent, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text((syncState as SyncState.Error).error, color = CrimsonAccent, fontSize = 11.sp)
                         }
@@ -845,7 +840,7 @@ fun ClipboardItemCard(
                         modifier = Modifier.size(28.dp)
                     ) {
                         Icon(
-                            if (item.isPinned) Icons.Default.Star else Icons.Default.StarBorder,
+                            if (item.isPinned) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                             contentDescription = "Sabitle",
                             tint = if (item.isPinned) AmberAccent else TextSecondary,
                             modifier = Modifier.size(18.dp)
@@ -856,7 +851,7 @@ fun ClipboardItemCard(
                         modifier = Modifier.size(28.dp)
                     ) {
                         Icon(
-                            Icons.Default.ContentCopy,
+                            Icons.Default.Create,
                             contentDescription = "Kopyala",
                             tint = CyanAccent,
                             modifier = Modifier.size(16.dp)
@@ -951,7 +946,7 @@ fun SettingsTab(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Vibration, contentDescription = null, tint = CyanAccent)
+                            Icon(Icons.Default.Notifications, contentDescription = null, tint = CyanAccent)
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text("Dokunmatik Titreşim (Haptic)", color = TextPrimary, fontWeight = FontWeight.Bold)
@@ -1043,7 +1038,7 @@ fun SettingsTab(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Cloud, contentDescription = null, tint = CyanAccent)
+                        Icon(Icons.Default.Share, contentDescription = null, tint = CyanAccent)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("☁️ Anında Bulut & Webhook Yedekleme", color = TextPrimary, fontWeight = FontWeight.Bold)
                     }
@@ -1139,7 +1134,7 @@ fun SettingsTab(
                             colors = ButtonDefaults.buttonColors(containerColor = CyanAccent),
                             shape = RoundedCornerShape(10.dp)
                         ) {
-                            Icon(Icons.Default.CloudUpload, contentDescription = null, tint = CyberBlack, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Send, contentDescription = null, tint = CyberBlack, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
                             Text("Tümünü Push Et", color = CyberBlack, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
@@ -1163,7 +1158,7 @@ fun SettingsTab(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Folder, contentDescription = null, tint = AmberAccent)
+                        Icon(Icons.Default.List, contentDescription = null, tint = AmberAccent)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("📁 Yerel Dosya Konumları", color = TextPrimary, fontWeight = FontWeight.Bold)
                     }
