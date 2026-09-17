@@ -24,15 +24,33 @@ android {
   }
 
   signingConfigs {
-    create("release") {
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
-      storeFile = file(keystorePath)
-      storePassword = System.getenv("STORE_PASSWORD")
-      keyAlias = "upload"
-      keyPassword = System.getenv("KEY_PASSWORD")
+    // Release signing is optional: only applied when KEYSTORE_PATH + passwords are provided (CI secrets).
+    val keystorePath = System.getenv("KEYSTORE_PATH")
+    val storePasswordEnv = System.getenv("STORE_PASSWORD")
+    val keyPasswordEnv = System.getenv("KEY_PASSWORD")
+    val keyAliasEnv = System.getenv("KEY_ALIAS") ?: "upload"
+    if (!keystorePath.isNullOrBlank() &&
+        !storePasswordEnv.isNullOrBlank() &&
+        !keyPasswordEnv.isNullOrBlank() &&
+        file(keystorePath).exists()) {
+      create("release") {
+        storeFile = file(keystorePath)
+        storePassword = storePasswordEnv
+        keyAlias = keyAliasEnv
+        keyPassword = keyPasswordEnv
+      }
     }
+
+    // Debug keystore: use project file if present, otherwise the default Android SDK debug keystore.
     create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
+      val projectDebug = file("${rootDir}/debug.keystore")
+      val homeDebug = file("${System.getProperty("user.home")}/.android/debug.keystore")
+      storeFile =
+        when {
+          projectDebug.exists() -> projectDebug
+          homeDebug.exists() -> homeDebug
+          else -> projectDebug // CI generates this path before the build
+        }
       storePassword = "android"
       keyAlias = "androiddebugkey"
       keyPassword = "android"
@@ -44,7 +62,9 @@ android {
       isCrunchPngs = false
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      signingConfig = signingConfigs.getByName("release")
+      // Prefer release keystore when available; fall back to debug so CI can still produce an APK.
+      signingConfig =
+        signingConfigs.findByName("release") ?: signingConfigs.getByName("debugConfig")
     }
     debug { signingConfig = signingConfigs.getByName("debugConfig") }
   }

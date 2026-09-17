@@ -1,0 +1,147 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: "APK build type"
+        required: true
+        default: debug
+        type: choice
+        options:
+          - debug
+          - release
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Assemble APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Resolve build type
+        id: meta
+        run: |
+          TYPE="${{ github.event.inputs.build_type }}"
+          if [ -z "$TYPE" ]; then
+            TYPE="debug"
+          fi
+          echo "build_type=$TYPE" >> "$GITHUB_OUTPUT"
+          if [ "$TYPE" = "release" ]; then
+            echo "gradle_task=assembleRelease" >> "$GITHUB_OUTPUT"
+            echo "apk_glob=app/build/outputs/apk/release/*.apk" >> "$GITHUB_OUTPUT"
+            echo "artifact_name=kalkan-klavye-release" >> "$GITHUB_OUTPUT"
+          else
+            echo "gradle_task=assembleDebug" >> "$GITHUB_OUTPUT"
+            echo "apk_glob=app/build/outputs/apk/debug/*.apk" >> "$GITHUB_OUTPUT"
+            echo "artifact_name=kalkan-klavye-debug" >> "$GITHUB_OUTPUT"
+          fi
+          SHORT_SHA="${GITHUB_SHA::7}"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "version_tag=v0.0.0+${GITHUB_RUN_NUMBER}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate debug keystore
+        run: |
+          if [ ! -f debug.keystore ]; then
+            keytool -genkeypair -v \
+              -keystore debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+      - name: Decode release keystore (optional)
+        if: steps.meta.outputs.build_type == 'release' && env.KEYSTORE_BASE64 != ''
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > upload-keystore.jks
+          echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/upload-keystore.jks" >> "$GITHUB_ENV"
+
+      - name: Build APK
+        env:
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          ./gradlew ${{ steps.meta.outputs.gradle_task }} \
+            --no-daemon \
+            --stacktrace \
+            -Dorg.gradle.jvmargs="-Xmx4g -Dfile.encoding=UTF-8"
+
+      - name: Locate APK
+        id: apk
+        run: |
+          APK_PATH=$(ls -1 ${{ steps.meta.outputs.apk_glob }} 2>/dev/null | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "APK not found under ${{ steps.meta.outputs.apk_glob }}"
+            find app/build/outputs -type f -name "*.apk" || true
+            exit 1
+          fi
+          OUT_NAME="KalkanKlavye-${{ steps.meta.outputs.build_type }}-${{ steps.meta.outputs.short_sha }}.apk"
+          cp "$APK_PATH" "$OUT_NAME"
+          echo "path=$OUT_NAME" >> "$GITHUB_OUTPUT"
+          ls -lh "$OUT_NAME"
+          echo "### APK ready: \`$OUT_NAME\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Build type: **${{ steps.meta.outputs.build_type }}**" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Commit: \`${{ steps.meta.outputs.short_sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Size: $(du -h "$OUT_NAME" | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.artifact_name }}
+          path: ${{ steps.apk.outputs.path }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub Release (main push only)
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.version_tag }}
+          name: Build ${{ steps.meta.outputs.version_tag }}
+          body: |
+            Otomatik APK derlemesi.
+
+            - **Build type:** ${{ steps.meta.outputs.build_type }}
+            - **Commit:** ${{ github.sha }}
+            - **Workflow run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            APK dosyasını aşağıdaki asset'ten indirebilirsin.
+          files: ${{ steps.apk.outputs.path }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
