@@ -175,28 +175,28 @@ class KalkanIME : InputMethodService() {
             createEditToolButton(
                 icon = "☑",
                 label = "Seç",
-                contentDescription = "Tümünü seç"
+                desc = "Tümünü seç"
             ) { performSelectAll() }
         )
         editToolbar.addView(
             createEditToolButton(
                 icon = "✂",
                 label = "Kes",
-                contentDescription = "Kes"
+                desc = "Kes"
             ) { performCut() }
         )
         editToolbar.addView(
             createEditToolButton(
                 icon = "⧉",
                 label = "Kopya",
-                contentDescription = "Kopyala"
+                desc = "Kopyala"
             ) { performCopy() }
         )
         editToolbar.addView(
             createEditToolButton(
                 icon = "📋",
                 label = "Yapıştır",
-                contentDescription = "Yapıştır"
+                desc = "Yapıştır"
             ) { performPaste() }
         )
 
